@@ -1,0 +1,5 @@
+/raw/
+/dist/
+*.dat
+*.exe
+/geofilter

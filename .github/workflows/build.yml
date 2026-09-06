@@ -1,0 +1,61 @@
+name: build geo
+
+on:
+  schedule:
+    - cron: "17 3 * * *" # daily, a bit after RunetFreedom's cadence
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "categories/**"
+      - "cmd/**"
+      - "go.*"
+      - ".github/workflows/build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Fetch upstream geo data
+        run: |
+          mkdir -p raw dist
+          base=https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download
+          curl -fsSL -o raw/geosite.dat "$base/geosite.dat"
+          curl -fsSL -o raw/geoip.dat   "$base/geoip.dat"
+          ls -la raw
+
+      - name: Trim
+        run: |
+          go run ./cmd/geofilter -kind geosite \
+            -allow categories/geosite.txt -in raw/geosite.dat -out dist/geosite.dat > dist/site.json
+          go run ./cmd/geofilter -kind geoip \
+            -allow categories/geoip.txt   -in raw/geoip.dat   -out dist/geoip.dat   > dist/ip.json
+
+      - name: Assemble categories.json + checksums
+        run: |
+          jq -n --slurpfile s dist/site.json --slurpfile i dist/ip.json \
+            '{site: $s[0], ip: $i[0]}' > dist/categories.json
+          rm dist/site.json dist/ip.json
+          cd dist && sha256sum geosite.dat geoip.dat categories.json > sha256sums.txt
+          cat categories.json
+          echo "---"
+          cat sha256sums.txt
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(date -u +%Y%m%d-%H%M)"
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes "Trimmed from runetfreedom/russia-v2ray-rules-dat. Categories in categories.json." \
+            dist/geosite.dat dist/geoip.dat dist/categories.json dist/sha256sums.txt
