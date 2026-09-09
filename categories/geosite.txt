@@ -1,16 +1,9 @@
 # geosite categories kept in the trimmed geosite.dat.
-# One category per line, written as it appears in a config (geosite:<name>).
-# Blank lines and #-comments ignored. "*" on its own line keeps everything.
-#
-# Stage A — only what provider configs reference. Small categories; keep a
-# generous set, it costs little. Do NOT add ru-blocked-all (1.37M domains,
-# ~44% of the full file).
 
 # infra / never-proxy
 private
 
-# Russian services that need a Russian exit (bank/gov/marketplace configs
-# route these direct)
+# Russian services - direct
 category-ru
 category-gov-ru
 vk
@@ -18,26 +11,14 @@ ok
 yandex
 mailru
 
-# common services referenced by split configs
-youtube
-google
-telegram
-twitter
-facebook
-discord
-whatsapp
-netflix
-spotify
-github
-openai
-apple
-microsoft
 
 # ad blocking (some panels route this to block)
 category-ads-all
 
-# Stage B (own split-tunnel) — add later, one line each, then re-run the
-# workflow. No app change needed.
+# Not used. These would only matter for a "force blocked domains through the
+# VPN" rule; the client's RU-bypass (docs/stage-b.md) doesn't need them —
+# blocked sites aren't in category-ru, so they already go through the tunnel.
+# Uncomment + re-run the workflow only if such a rule is added.
 # ru-blocked
 # ru-blocked-community
 # re-filter

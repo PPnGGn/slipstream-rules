@@ -23,7 +23,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/xtls/xray-core/app/router"
+	"github.com/xtls/xray-core/common/geodata"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -94,32 +94,32 @@ func main() {
 }
 
 func filterGeosite(raw []byte, keep func(string) bool, outPath string) ([]string, error) {
-	var list router.GeoSiteList
+	var list geodata.GeoSiteList
 	if err := proto.Unmarshal(raw, &list); err != nil {
 		return nil, fmt.Errorf("unmarshal geosite: %w", err)
 	}
-	trimmed := &router.GeoSiteList{}
+	trimmed := &geodata.GeoSiteList{}
 	var kept []string
 	for _, e := range list.Entry {
-		if keep(e.CountryCode) {
+		if keep(e.Code) {
 			trimmed.Entry = append(trimmed.Entry, e)
-			kept = append(kept, "geosite:"+strings.ToLower(e.CountryCode))
+			kept = append(kept, "geosite:"+strings.ToLower(e.Code))
 		}
 	}
 	return kept, marshalTo(trimmed, outPath)
 }
 
 func filterGeoip(raw []byte, keep func(string) bool, outPath string) ([]string, error) {
-	var list router.GeoIPList
+	var list geodata.GeoIPList
 	if err := proto.Unmarshal(raw, &list); err != nil {
 		return nil, fmt.Errorf("unmarshal geoip: %w", err)
 	}
-	trimmed := &router.GeoIPList{}
+	trimmed := &geodata.GeoIPList{}
 	var kept []string
 	for _, e := range list.Entry {
-		if keep(e.CountryCode) {
+		if keep(e.Code) {
 			trimmed.Entry = append(trimmed.Entry, e)
-			kept = append(kept, "geoip:"+strings.ToLower(e.CountryCode))
+			kept = append(kept, "geoip:"+strings.ToLower(e.Code))
 		}
 	}
 	return kept, marshalTo(trimmed, outPath)
