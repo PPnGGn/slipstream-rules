@@ -126,7 +126,9 @@ func filterGeoip(raw []byte, keep func(string) bool, outPath string) ([]string, 
 }
 
 func marshalTo(m proto.Message, outPath string) error {
-	b, err := proto.Marshal(m)
+	// Deterministic: identical input -> identical bytes -> identical sha256, so
+	// the workflow can skip publishing a release when nothing actually changed.
+	b, err := proto.MarshalOptions{Deterministic: true}.Marshal(m)
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
@@ -134,8 +136,10 @@ func marshalTo(m proto.Message, outPath string) error {
 }
 
 // readAllowlist returns a set of UPPERCASE category codes. Lines may be written
-// as they appear in configs ("category-ru"). Blank lines and #-comments are
-// ignored. A lone "*" means keep every category (keepAll = true).
+// either bare ("category-ru") or with the token prefix ("geosite:category-ru" /
+// "geoip:ru") — both forms resolve to the same code. Blank lines and #-comments
+// (whole-line or trailing) are ignored. A lone "*" means keep every category
+// (keepAll = true). Duplicate entries are warned about, not an error.
 func readAllowlist(path string) (set map[string]bool, keepAll bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -157,7 +161,13 @@ func readAllowlist(path string) (set map[string]bool, keepAll bool, err error) {
 			keepAll = true
 			continue
 		}
-		set[strings.ToUpper(line)] = true
+		line = strings.TrimPrefix(line, "geosite:")
+		line = strings.TrimPrefix(line, "geoip:")
+		code := strings.ToUpper(line)
+		if set[code] {
+			fmt.Fprintf(os.Stderr, "warning: duplicate allowlist entry %q\n", code)
+		}
+		set[code] = true
 	}
 	return set, keepAll, sc.Err()
 }

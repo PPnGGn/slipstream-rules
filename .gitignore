@@ -1,5 +1,7 @@
 /raw/
 /dist/
+/bin/
+/prev/
 *.dat
 *.exe
 /geofilter

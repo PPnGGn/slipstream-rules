@@ -1,5 +1,6 @@
 // geolist: prints every category in a geosite.dat / geoip.dat with its entry count.
-//   go run ./cmd/geolist -kind geosite -in geosite.dat
+//
+//	go run ./cmd/geolist -kind geosite -in geosite.dat
 package main
 
 import (
