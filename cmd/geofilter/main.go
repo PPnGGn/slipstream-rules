@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -41,7 +42,7 @@ func main() {
 		fail("-allow, -in and -out are required")
 	}
 
-	allow, keepAll, err := readAllowlist(*allowPath)
+	allow, optional, keepAll, err := readAllowlist(*allowPath)
 	if err != nil {
 		fail("allowlist: %v", err)
 	}
@@ -66,18 +67,16 @@ func main() {
 		fail("%v", err)
 	}
 
-	// Warn (don't fail) about allowlist entries that weren't in the source —
-	// a typo or a category RunetFreedom renamed.
+	// A required allowlist entry that wasn't in the source (a typo, or a
+	// category RunetFreedom renamed) fails the build — publishing a release
+	// silently missing it would strip that token from every config on
+	// install, with nothing to signal the regression. An entry prefixed "?"
+	// in the allowlist is optional: only a warning.
 	if !keepAll {
-		keptSet := make(map[string]bool, len(kept))
-		for _, k := range kept {
-			keptSet[k] = true
-		}
-		for code := range allow {
-			token := *kind + ":" + strings.ToLower(code)
-			if !keptSet[token] {
-				fmt.Fprintf(os.Stderr, "warning: %q from allowlist not found in %s\n", token, *inPath)
-			}
+		missing := checkAllowlistCoverage(*kind, allow, optional, kept, os.Stderr)
+		if len(missing) > 0 {
+			fail("required allowlist entries not found in %s: %s (prefix with ? in the allowlist if this is expected)",
+				*inPath, strings.Join(missing, ", "))
 		}
 	}
 
@@ -140,14 +139,19 @@ func marshalTo(m proto.Message, outPath string) error {
 // "geoip:ru") — both forms resolve to the same code. Blank lines and #-comments
 // (whole-line or trailing) are ignored. A lone "*" means keep every category
 // (keepAll = true). Duplicate entries are warned about, not an error.
-func readAllowlist(path string) (set map[string]bool, keepAll bool, err error) {
+//
+// A leading "?" ("?category-ads-ir") marks the entry optional: if it isn't
+// found in the source .dat, main only warns instead of failing the build.
+// Every other entry is required — see the missing-entries check in main.
+func readAllowlist(path string) (set map[string]bool, optional map[string]bool, keepAll bool, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	defer f.Close()
 
 	set = make(map[string]bool)
+	optional = make(map[string]bool)
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
@@ -161,6 +165,8 @@ func readAllowlist(path string) (set map[string]bool, keepAll bool, err error) {
 			keepAll = true
 			continue
 		}
+		isOptional := strings.HasPrefix(line, "?")
+		line = strings.TrimPrefix(line, "?")
 		line = strings.TrimPrefix(line, "geosite:")
 		line = strings.TrimPrefix(line, "geoip:")
 		code := strings.ToUpper(line)
@@ -168,8 +174,37 @@ func readAllowlist(path string) (set map[string]bool, keepAll bool, err error) {
 			fmt.Fprintf(os.Stderr, "warning: duplicate allowlist entry %q\n", code)
 		}
 		set[code] = true
+		if isOptional {
+			optional[code] = true
+		}
 	}
-	return set, keepAll, sc.Err()
+	return set, optional, keepAll, sc.Err()
+}
+
+// checkAllowlistCoverage reports which required allowlist entries have no
+// matching token in kept (the tokens filterGeosite/filterGeoip actually
+// produced). Optional entries (allowlist "?" prefix) that are missing are
+// only warned about, on warn, and excluded from the returned list — the
+// caller fails the build if anything is returned.
+func checkAllowlistCoverage(kind string, allow, optional map[string]bool, kept []string, warn io.Writer) []string {
+	keptSet := make(map[string]bool, len(kept))
+	for _, k := range kept {
+		keptSet[k] = true
+	}
+	var missing []string
+	for code := range allow {
+		token := kind + ":" + strings.ToLower(code)
+		if keptSet[token] {
+			continue
+		}
+		if optional[code] {
+			fmt.Fprintf(warn, "warning: %q from allowlist not found in the source .dat\n", token)
+		} else {
+			missing = append(missing, token)
+		}
+	}
+	sort.Strings(missing)
+	return missing
 }
 
 func fail(format string, a ...any) {

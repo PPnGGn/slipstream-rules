@@ -37,6 +37,10 @@ jobs:
           go build -o bin/geofilter ./cmd/geofilter
           go build -o bin/geocheck  ./cmd/geocheck
 
+      - name: Compute release tag
+        id: tag
+        run: echo "tag=$(date -u +%Y%m%d-%H%M)" >> "$GITHUB_OUTPUT"
+
       - name: Fetch upstream geo data
         run: |
           mkdir -p raw dist
@@ -79,16 +83,37 @@ jobs:
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
+      # release.json is assembled after the gate (only when publishing) and is
+      # deliberately NOT part of sha256sums.txt: it embeds this run's tag,
+      # which is different on every run even when the trimmed .dat bytes
+      # aren't — including it in the checksummed set would make the gate
+      # above think something changed every single time.
+      - name: Assemble release.json
+        if: steps.gate.outputs.changed == 'true'
+        run: |
+          python3 - "$TAG" <<'PY'
+          import json, os, sys
+          tag = sys.argv[1]
+          sizes = {
+              name: os.path.getsize(os.path.join("dist", name))
+              for name in ("geosite.dat", "geoip.dat", "categories.json")
+          }
+          json.dump({"tag": tag, "sizes": sizes}, open("dist/release.json", "w"), indent=2)
+          PY
+          cat dist/release.json
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+
       - name: Publish release
         if: steps.gate.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="$(date -u +%Y%m%d-%H%M)"
+          tag="${{ steps.tag.outputs.tag }}"
           gh release create "$tag" \
             --title "$tag" \
             --notes "Trimmed from runetfreedom/russia-v2ray-rules-dat (GPL-3.0). Categories in categories.json." \
-            dist/geosite.dat dist/geoip.dat dist/categories.json dist/sha256sums.txt
+            dist/geosite.dat dist/geoip.dat dist/categories.json dist/sha256sums.txt dist/release.json
 
       - name: Report failure
         if: failure()

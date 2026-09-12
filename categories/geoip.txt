@@ -1,9 +1,4 @@
 # geoip categories kept in the trimmed geoip.dat.
-#
-# The RunetFreedom geoip.dat is a full country DB (~18 MB, 266 entries) plus
-# PRIVATE / TOR / RU-BLOCKED / RE-FILTER / service ASNs. Configs reference
-# arbitrary country codes (geoip:us, geoip:de, ...), so keep the whole thing —
-# trimming countries saves little and breaks those rules.
 
 *
 

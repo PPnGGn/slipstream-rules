@@ -18,7 +18,8 @@ Each release (`YYYYMMDD-HHMM` tag) has:
 | `geosite.dat` | trimmed, xray format, deterministic bytes |
 | `geoip.dat` | trimmed, xray format, deterministic bytes |
 | `categories.json` | `{"site": ["geosite:category-ru", …], "ip": ["geoip:ru", …]}` — the tokens actually present, so the app knows which `geosite:`/`geoip:` refs it can keep |
-| `sha256sums.txt` | `sha256sum` format (`<hex>  <name>`); the app verifies each asset against it |
+| `sha256sums.txt` | `sha256sum` format (`<hex>  <name>`) for `geosite.dat`/`geoip.dat`/`categories.json`; the app verifies each against it |
+| `release.json` | `{"tag": "…", "sizes": {"geosite.dat": N, …}}` — lets the app read the latest tag and asset sizes without hitting the GitHub API (rate-limited to 60 req/hour **per IP**, which the app can't afford once every user downloads through the same exit node's shared IP). Not in `sha256sums.txt` on purpose — it embeds this run's tag, which changes every run even when the trimmed bytes don't, and that would defeat skip-if-unchanged. |
 
 The app downloads from `releases/latest/download/…`. It does **not** poll for
 updates — it fetches once on first install and again only when the user taps
@@ -33,12 +34,19 @@ accepted; `#` starts a comment; `*` on its own line keeps everything. Push to
 `main` (or run the workflow manually); the next release picks it up. No client
 change needed — the app reads `categories.json`.
 
+Every entry is **required** by default: if RunetFreedom renames or drops a
+category the allowlist still names, `geofilter` fails the build instead of
+silently publishing a release without it (a category quietly missing from a
+release strips that token from every user's config on install, with nothing
+to signal the regression). Prefix an entry with `?` (`?category-ads-ir`) to
+mark it optional — a miss there only prints a warning.
+
 ## Tools
 
 | cmd | what |
 |---|---|
-| `geofilter` | reads a `.dat`, keeps allowlisted entries, writes it back, prints the kept tokens as JSON |
-| `geocheck` | loads a trimmed `dist/` through xray-core's real geo-data loader — fails if a `.dat` won't parse or a `categories.json` token is missing |
+| `geofilter` | reads a `.dat`, keeps allowlisted entries, writes it back, prints the kept tokens as JSON — fails the build if a required allowlist entry has no match in the source |
+| `geocheck` | builds a real matcher (`DomainReg`/`IPReg`, the same registries `config.Build()` uses) for every `categories.json` token against a trimmed `dist/` — fails if a `.dat` won't parse, a token is missing, or an individual entry inside a category is corrupt; also logs each category's entry count |
 | `geolist` | prints every category in a `.dat` with its entry count (inspection only) |
 
 ```
